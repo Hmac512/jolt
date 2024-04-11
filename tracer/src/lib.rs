@@ -58,7 +58,6 @@ pub fn trace(elf_contents: Vec<u8>, inputs: Vec<u8>) -> (Vec<RVTraceRow>, JoltDe
     (output, device)
 }
 
-
 #[tracing::instrument(skip_all)]
 pub fn trace_file(elf: &PathBuf, inputs: Vec<u8>) -> (Vec<RVTraceRow>, JoltDevice) {
     let mut elf_file = File::open(elf).unwrap();
@@ -68,10 +67,7 @@ pub fn trace_file(elf: &PathBuf, inputs: Vec<u8>) -> (Vec<RVTraceRow>, JoltDevic
     trace(elf_contents, inputs)
 }
 
-
-
 pub fn decode_elf(elf_contents: Vec<u8>) -> (Vec<ELFInstruction>, Vec<(u64, u8)>) {
-
     let obj = object::File::parse(&*elf_contents).unwrap();
     let sections = obj
         .sections()

@@ -76,7 +76,11 @@ impl Program {
             if let Some(func) = &self.func {
                 envs.push(("JOLT_FUNC_NAME", func.to_string()));
             }
-            println!("Building guest: {}/{}", self.guest, self.func.as_ref().unwrap_or(&"".to_string()));
+            println!(
+                "Building guest: {}/{}",
+                self.guest,
+                self.func.as_ref().unwrap_or(&"".to_string())
+            );
             let target = format!(
                 "/tmp/jolt-guest-target-{}-{}",
                 self.guest,
@@ -118,12 +122,14 @@ impl Program {
         tracer::decode_file(elf)
     }
 
-    pub fn decode_binary(&mut self, elf_contents: Vec<u8>) -> (Vec<ELFInstruction>, Vec<(u64, u8)>) {
+    pub fn decode_binary(
+        &mut self,
+        elf_contents: Vec<u8>,
+    ) -> (Vec<ELFInstruction>, Vec<(u64, u8)>) {
         let decoded = tracer::decode_elf(elf_contents.clone());
         self.elf_provided = elf_contents.clone().into();
         decoded
     }
-
 
     // TODO(moodlezoup): Make this generic over InstructionSet
     #[tracing::instrument(skip_all, name = "Program::trace")]
@@ -140,19 +146,14 @@ impl Program {
             self.build();
         }
 
-        
-        
-
-        let (trace, io_device) =  match self.elf_provided {
-            Some(elf_contents) => {
-                tracer::trace(elf_contents, self.input)
-            },
+        let (trace, io_device) = match self.elf_provided {
+            Some(elf_contents) => tracer::trace(elf_contents, self.input),
             None => {
                 let elf = self.elf.unwrap();
                 tracer::trace_file(&elf, self.input)
             }
         };
-        
+
         let bytecode_trace: Vec<BytecodeRow> = trace
             .par_iter()
             .map(|row| BytecodeRow::from_instruction::<RV32I>(&row.instruction))
