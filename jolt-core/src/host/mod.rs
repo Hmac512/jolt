@@ -68,44 +68,44 @@ impl Program {
     #[tracing::instrument(skip_all, name = "Program::build")]
     pub fn build(&mut self) {
         if self.elf.is_none() {
-            self.save_linker();
+            // self.save_linker();
 
-            let mut envs = vec![("RUSTFLAGS", format!("-C link-arg=-T{}", self.linker_path()))];
-            if let Some(func) = &self.func {
-                envs.push(("JOLT_FUNC_NAME", func.to_string()));
-            }
+            // let mut envs = vec![("RUSTFLAGS", format!("-C link-arg=-T{}", self.linker_path()))];
+            // if let Some(func) = &self.func {
+            //     envs.push(("JOLT_FUNC_NAME", func.to_string()));
+            // }
 
-            let target = format!(
-                "/tmp/jolt-guest-target-{}-{}",
-                self.guest,
-                self.func.as_ref().unwrap_or(&"".to_string())
-            );
+            // let target = format!(
+            //     "/tmp/jolt-guest-target-{}-{}",
+            //     self.guest,
+            //     self.func.as_ref().unwrap_or(&"".to_string())
+            // );
 
-            let output = Command::new("cargo")
-                .envs(envs)
-                .args(&[
-                    "build",
-                    "--release",
-                    "--features",
-                    "guest",
-                    "-p",
-                    &self.guest,
-                    "--target-dir",
-                    &target,
-                    "--target",
-                    "riscv32i-unknown-none-elf",
-                    "--bin",
-                    "guest",
-                ])
-                .output()
-                .expect("failed to build guest");
+            // let output = Command::new("cargo")
+            //     .envs(envs)
+            //     .args(&[
+            //         "build",
+            //         "--release",
+            //         "--features",
+            //         "guest",
+            //         "-p",
+            //         &self.guest,
+            //         "--target-dir",
+            //         &target,
+            //         "--target",
+            //         "riscv32i-unknown-none-elf",
+            //         "--bin",
+            //         "guest",
+            //     ])
+            //     .output()
+            //     .expect("failed to build guest");
 
-            if !output.status.success() {
-                io::stderr().write(&output.stderr).unwrap();
-                panic!("failed to compile guest");
-            }
+            // if !output.status.success() {
+            //     io::stderr().write(&output.stderr).unwrap();
+            //     panic!("failed to compile guest");
+            // }
 
-            let elf = format!("{}/riscv32i-unknown-none-elf/release/guest", target,);
+            let elf = format!("./guess");
             self.elf = Some(PathBuf::from_str(&elf).unwrap());
         }
     }
