@@ -22,7 +22,7 @@ pub use common::rv_trace::{
 use crate::decode::decode_raw;
 
 #[tracing::instrument(skip_all)]
-pub fn trace(elf: &PathBuf, inputs: Vec<u8>) -> (Vec<RVTraceRow>, JoltDevice) {
+pub fn trace(elf_contents: Vec<u8>, inputs: Vec<u8>) -> (Vec<RVTraceRow>, JoltDevice) {
     let term = DefaultTerminal::new();
     let mut emulator = Emulator::new(Box::new(term));
     emulator.update_xlen(get_xlen());
@@ -30,11 +30,6 @@ pub fn trace(elf: &PathBuf, inputs: Vec<u8>) -> (Vec<RVTraceRow>, JoltDevice) {
     let mut jolt_device = JoltDevice::new();
     jolt_device.inputs = inputs;
     emulator.get_mut_cpu().get_mut_mmu().jolt_device = jolt_device;
-
-    let mut elf_file = File::open(elf).unwrap();
-
-    let mut elf_contents = Vec::new();
-    elf_file.read_to_end(&mut elf_contents).unwrap();
 
     emulator.setup_program(elf_contents);
 
@@ -64,13 +59,16 @@ pub fn trace(elf: &PathBuf, inputs: Vec<u8>) -> (Vec<RVTraceRow>, JoltDevice) {
 }
 
 #[tracing::instrument(skip_all)]
-pub fn decode(elf: &PathBuf) -> (Vec<ELFInstruction>, Vec<(u64, u8)>) {
+pub fn trace_file(elf: &PathBuf, inputs: Vec<u8>) -> (Vec<RVTraceRow>, JoltDevice) {
     let mut elf_file = File::open(elf).unwrap();
+
     let mut elf_contents = Vec::new();
     elf_file.read_to_end(&mut elf_contents).unwrap();
+    trace(elf_contents, inputs)
+}
 
+pub fn decode_elf(elf_contents: Vec<u8>) -> (Vec<ELFInstruction>, Vec<(u64, u8)>) {
     let obj = object::File::parse(&*elf_contents).unwrap();
-
     let sections = obj
         .sections()
         .filter(|s| s.address() >= RAM_START_ADDRESS)
@@ -113,6 +111,15 @@ pub fn decode(elf: &PathBuf) -> (Vec<ELFInstruction>, Vec<(u64, u8)>) {
     }
 
     (instructions, data)
+}
+
+#[tracing::instrument(skip_all)]
+pub fn decode_file(elf: &PathBuf) -> (Vec<ELFInstruction>, Vec<(u64, u8)>) {
+    let mut elf_file = File::open(elf).unwrap();
+    let mut elf_contents = Vec::new();
+    elf_file.read_to_end(&mut elf_contents).unwrap();
+
+    decode_elf(elf_contents)
 }
 
 fn get_xlen() -> Xlen {
