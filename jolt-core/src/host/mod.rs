@@ -34,6 +34,7 @@ pub struct Program {
     memory_size: usize,
     stack_size: usize,
     pub elf: Option<PathBuf>,
+    elf_provided: Option<Vec<u8>>,
 }
 
 impl Program {
@@ -45,6 +46,7 @@ impl Program {
             memory_size: DEFAULT_MEMORY_SIZE,
             stack_size: DEFAULT_STACK_SIZE,
             elf: None,
+            elf_provided: None,
         }
     }
 
@@ -68,44 +70,44 @@ impl Program {
     #[tracing::instrument(skip_all, name = "Program::build")]
     pub fn build(&mut self) {
         if self.elf.is_none() {
-            // self.save_linker();
+            self.save_linker();
 
-            // let mut envs = vec![("RUSTFLAGS", format!("-C link-arg=-T{}", self.linker_path()))];
-            // if let Some(func) = &self.func {
-            //     envs.push(("JOLT_FUNC_NAME", func.to_string()));
-            // }
+            let mut envs = vec![("RUSTFLAGS", format!("-C link-arg=-T{}", self.linker_path()))];
+            if let Some(func) = &self.func {
+                envs.push(("JOLT_FUNC_NAME", func.to_string()));
+            }
+            println!("Building guest: {}/{}", self.guest, self.func.as_ref().unwrap_or(&"".to_string()));
+            let target = format!(
+                "/tmp/jolt-guest-target-{}-{}",
+                self.guest,
+                self.func.as_ref().unwrap_or(&"".to_string())
+            );
 
-            // let target = format!(
-            //     "/tmp/jolt-guest-target-{}-{}",
-            //     self.guest,
-            //     self.func.as_ref().unwrap_or(&"".to_string())
-            // );
+            let output = Command::new("cargo")
+                .envs(envs)
+                .args(&[
+                    "build",
+                    "--release",
+                    "--features",
+                    "guest",
+                    "-p",
+                    &self.guest,
+                    "--target-dir",
+                    &target,
+                    "--target",
+                    "riscv32i-unknown-none-elf",
+                    "--bin",
+                    "guest",
+                ])
+                .output()
+                .expect("failed to build guest");
 
-            // let output = Command::new("cargo")
-            //     .envs(envs)
-            //     .args(&[
-            //         "build",
-            //         "--release",
-            //         "--features",
-            //         "guest",
-            //         "-p",
-            //         &self.guest,
-            //         "--target-dir",
-            //         &target,
-            //         "--target",
-            //         "riscv32i-unknown-none-elf",
-            //         "--bin",
-            //         "guest",
-            //     ])
-            //     .output()
-            //     .expect("failed to build guest");
+            if !output.status.success() {
+                io::stderr().write(&output.stderr).unwrap();
+                panic!("failed to compile guest");
+            }
 
-            // if !output.status.success() {
-            //     io::stderr().write(&output.stderr).unwrap();
-            //     panic!("failed to compile guest");
-            // }
-
-            let elf = format!("./guess");
+            let elf = format!("{}/riscv32i-unknown-none-elf/release/guest", target,);
             self.elf = Some(PathBuf::from_str(&elf).unwrap());
         }
     }
@@ -113,8 +115,15 @@ impl Program {
     pub fn decode(&mut self) -> (Vec<ELFInstruction>, Vec<(u64, u8)>) {
         self.build();
         let elf = self.elf.as_ref().unwrap();
-        tracer::decode(elf)
+        tracer::decode_file(elf)
     }
+
+    pub fn decode_binary(&mut self, elf_contents: Vec<u8>) -> (Vec<ELFInstruction>, Vec<(u64, u8)>) {
+        let decoded = tracer::decode_elf(elf_contents.clone());
+        self.elf_provided = elf_contents.clone().into();
+        decoded
+    }
+
 
     // TODO(moodlezoup): Make this generic over InstructionSet
     #[tracing::instrument(skip_all, name = "Program::trace")]
@@ -127,10 +136,23 @@ impl Program {
         Vec<[MemoryOp; MEMORY_OPS_PER_INSTRUCTION]>,
         Vec<F>,
     ) {
-        self.build();
-        let elf = self.elf.unwrap();
-        let (trace, io_device) = tracer::trace(&elf, self.input);
+        if self.elf_provided.is_none() {
+            self.build();
+        }
 
+        
+        
+
+        let (trace, io_device) =  match self.elf_provided {
+            Some(elf_contents) => {
+                tracer::trace(elf_contents, self.input)
+            },
+            None => {
+                let elf = self.elf.unwrap();
+                tracer::trace_file(&elf, self.input)
+            }
+        };
+        
         let bytecode_trace: Vec<BytecodeRow> = trace
             .par_iter()
             .map(|row| BytecodeRow::from_instruction::<RV32I>(&row.instruction))
@@ -176,7 +198,7 @@ impl Program {
     pub fn trace_analyze(mut self) -> (usize, Vec<(RV32IM, usize)>) {
         self.build();
         let elf = self.elf.unwrap();
-        let (rows, _) = tracer::trace(&elf, self.input);
+        let (rows, _) = tracer::trace_file(&elf, self.input);
         let trace_len = rows.len();
 
         let mut counts = HashMap::<RV32IM, usize>::new();
